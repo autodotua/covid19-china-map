@@ -1,6 +1,6 @@
 function covid2019
-    start=[2020,1,20];
-    stop=[2022,12,08];
+    start=[2022,9,1];
+    stop=[2022,12,8];
 
     shp=shaperead("maps/分省.shp");
     dataTable=readtable("DXYArea.csv");
@@ -13,25 +13,25 @@ function covid2019
     start=datenum(start);
     stop=datenum(stop);
 
-    confirmeds=zeros(stop-start+1,length(uniqueProvince));
     news=zeros(stop-start+1,length(uniqueProvince));
 
     for date=start:stop
         disp("正在处理"+string(datetime(date,ConvertFrom="datenum")));
         for i=1:length(uniqueProvince)
             index=find(provinces==uniqueProvince(i) & dates==date,1);
-            if isempty(index)
-                if date~=start
-                    confirmeds(date-start+1,i)=confirmeds(date-start,i);
-                end
+            lastIndex=find(provinces==uniqueProvince(i) & dates==date-1,1);
+            if ~isempty(index) && ~isempty(lastIndex)
+                news(date-start+1,i)=confirmedCounts(index)-confirmedCounts(lastIndex);
             else
-                confirmeds(date-start+1,i)=confirmedCounts(index);
-                if  date~=start
-                    news(date-start+1,i)=confirmedCounts(index)-confirmeds(date-start,i);
-                end
+                news(date-start+1,i)=-1;
             end
         end
-        if date~=start
+        if any(news(date-start+1,:)>=0)
+            news(date-start+1,news(date-start+1,:)<0)=0;
+        else
+            disp(string(datetime(date,ConvertFrom="datenum"))+"数据缺失");
+        end
+        if date~=start && ~any(news(date-start+1,:)<0)
             draw(shp,datetime(date,ConvertFrom="datenum"),news(date-start+1,:),uniqueProvince);
         end
     end
@@ -43,13 +43,15 @@ function draw(shp,date,data,provinces)
     hold on
     names=strings(length(shp),1);
     counts=zeros(length(shp),1);
-    types={'0' [0,0] [255,255,255]
+    types={
+        '0' [0,0] [255,255,255]
         '1-10' [1,10]  [255, 243, 224]
         '11-50' [11,50] [255, 183, 77]
         '51-400' [51,400] [251, 140, 0]
         '401-2000' [401,2000] [244, 67, 54]
         '2001-10000' [2001,10000] [183, 28, 28]
         '>10000' [10000,10000000] [133, 18, 18]
+       % '数据缺失' [-1,-1] [160,160,160]
         };
     for type=types'
         fill(nan,nan,type{3}/256);
@@ -99,7 +101,12 @@ function draw(shp,date,data,provinces)
     set(gcf,'position',[0,0,800,550])
     axis off
     text(140,50,string(date),Color=[0.5 0.5 0.5],FontSize=18, FontName="微软雅黑");
-    text(140,45,string(sum(data)),Color=[0 0 0],FontSize=30, FontName="微软雅黑",FontWeight="bold");
+    if all(data==-1)
+        title="数据缺失";
+    else
+        title=string(sum(data(data>0)));
+    end
+    text(140,45,title,Color=[0 0 0],FontSize=30, FontName="微软雅黑",FontWeight="bold");
     set(gca, 'FontName', '微软雅黑')
     l=legend(types(:,1),Location='southwest',Box='off');
     l.Title.String="图例";
